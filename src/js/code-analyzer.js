@@ -7,6 +7,9 @@ let arrayColors=[];
 let Input=[];
 let listNodes=[];
 let listRoles=[];
+let j=0;
+let countRole=0;
+let nodesFalse=[];
 
 const parseCode = (codeToParse) => {
     return esprima.parseScript(codeToParse,{loc:true});
@@ -23,23 +26,8 @@ export {makeGraph};
 const makeGraph = (cfg,dot,color) => {
     listNodes=[];
     listRoles=[];
-    let lines = dot.split('\n');
-    for (let i=0;i<lines.length;i++){
-        if(lines[i].includes('->')){
-            listRoles.push(lines[i]);
-        }
-        else if(lines[i] != '')
-            listNodes.push(lines[i].split(' '));
-    }
-    let lastNode=listNodes[listNodes.length-1];
-    let exit=lastNode[0];
-    let newRoles=[];
-    for (let i=0;i<listRoles.length;i++){
-        if(listRoles[i].includes('n0') || listRoles[i].includes(exit))
-            continue;
-        else newRoles.push(listRoles[i].split(' '));
-    }
-    listRoles=newRoles;
+    initNodesAndRoles(dot);
+    deleteNodes();
     let newNodes=[];
     for (let i=0;i<listNodes.length;i++){
         if(i==0 || i==listNodes.length-1)
@@ -53,6 +41,29 @@ const makeGraph = (cfg,dot,color) => {
     let graph = makeStringGraph(listNodes,listRoles);
     return graph;
 };
+
+function initNodesAndRoles(dot) {
+    let lines = dot.split('\n');
+    for (let i=0;i<lines.length;i++){
+        if(lines[i].includes('->')){
+            listRoles.push(lines[i]);
+        }
+        else if(lines[i] != '')
+            listNodes.push(lines[i].split(' '));
+    }
+}
+
+function deleteNodes() {
+    let lastNode=listNodes[listNodes.length-1];
+    let exit=lastNode[0];
+    let newRoles=[];
+    for (let i=0;i<listRoles.length;i++){
+        if(listRoles[i].includes('n0') || listRoles[i].includes(exit))
+            continue;
+        else newRoles.push(listRoles[i].split(' '));
+    }
+    listRoles=newRoles;
+}
 
 function makeStringGraph(listNodes,listRoles){
     let graph='';
@@ -93,56 +104,65 @@ function replaceLabel(listNodes,cfg){
 }
 
 function getColors(listNodes,listRoles,color){
-    let j=0;
-    let countRole=0;
-    let nodesFalse=[];
+    j=0;
+    countRole=0;
+    nodesFalse=[];
     for (let i=0;i<listNodes.length;i++) {
         if(listNodes[i][1] == 'ReturnStatement'){
             listNodes[i].push('green');
         }
         else if(listNodes[i][1] != 'BinaryExpression'){
-            if(nodesFalse.indexOf(listNodes[i][0]) >= 0)
-                listNodes[i].push('white');
-            else listNodes[i].push('green');
+            if(nodesFalse.indexOf(listNodes[i][0]) == -1)
+                listNodes[i].push('green');
         }
         else{
-            if(nodesFalse.indexOf(listNodes[i][0]) >= 0){
-                listNodes[i].push('white');
-                j++;
-                continue;
-            }
-            else listNodes[i].push('green');
-            while(listRoles[countRole][0] != listNodes[i][0])
-                countRole++;
-            if(color[j]=='true'){
-                countRole++;
-                nodesFalse.push(listRoles[countRole][2]);
-                for(let k=countRole+1;k<listRoles.length;k++){
-                    if (nodesFalse.indexOf(listRoles[k][0]) >= 0){
-                        nodesFalse.push(listRoles[k][2]);
-                    }
-                }
-            }
-            else{
-                nodesFalse.push(listRoles[countRole][2]);
-                for(let k=countRole+1;k<listRoles.length;k++){
-                    if (nodesFalse.indexOf(listRoles[k][0]) >= 0){
-                        nodesFalse.push(listRoles[k][2]);
-                    }
-                }
-            }
-            j++;
+            binaryColor(i,color);
         }
     }
     return listNodes;
 }
 
+function binaryColor(i,color){
+    if(nodesFalse.indexOf(listNodes[i][0]) >= 0){
+        j++;
+        return;}
+    else listNodes[i].push('green');
+    while(listRoles[countRole][0] != listNodes[i][0])
+        countRole++;
+    if(color[j]=='true'){
+        ifGreen();}
+    else{
+        ifWhite();
+    }
+    j++;
+}
+
+function ifWhite() {
+    nodesFalse.push(listRoles[countRole][2]);
+    for(let k=countRole+1;k<listRoles.length;k++){
+        if (nodesFalse.indexOf(listRoles[k][0]) >= 0){
+            nodesFalse.push(listRoles[k][2]);
+        }
+    }
+}
+function ifGreen() {
+    countRole++;
+    nodesFalse.push(listRoles[countRole][2]);
+    for(let k=countRole+1;k<listRoles.length;k++){
+        if (nodesFalse.indexOf(listRoles[k][0]) >= 0){
+            nodesFalse.push(listRoles[k][2]);
+        }
+    }
+}
 const itercode = (parsedCode,params) => {
+    oldArgs={};
+    arrayColors=[];
+    Input=[];
+    args={};
     initParams(params);
-    parsedCode=initGlobal(parsedCode);
     let body = [];
     for (let i = 0; i < parsedCode.body.length; i++){
-        if (parsedCode.body[i]!=null) body.push(parsedCode.body[i]);
+        body.push(parsedCode.body[i]);
     }
     parsedCode.body=body;
     for (let i=0 ; i<parsedCode.body.length; i++){
@@ -155,17 +175,7 @@ function initParams(params) {
     if(parse.body[0].expression.expressions!=null){
         Input=parse.body[0].expression.expressions;
     }
-    else Input[0]=parse.body[0].expression.expressions;
-}
-
-function initGlobal(parsedCode) {
-    for (let i=0 ; i<parsedCode.body.length; i++){
-        if(parsedCode.body[i].type=='FunctionDeclaration')
-            continue;
-        parsedCode.body[i]=loopItercode(parsedCode.body[i]);
-        delete parsedCode.body[i];
-    }
-    return parsedCode;
+    else Input[0]=parse.body[0].expression;
 }
 
 function loopItercode(codeJsonBody){
@@ -240,9 +250,7 @@ function binaryExpression(codeJsonBody){
 
 
 function identifier(codeJsonBody) {
-    if(codeJsonBody.name in args)
-        return args[codeJsonBody.name];
-    else return codeJsonBody;
+    return args[codeJsonBody.name];
 }
 
 function whileStatement(codeJsonBody){
@@ -279,9 +287,7 @@ function alternate(codeJsonBody){
 
 function memberExpression(codeJsonBody) {
     codeJsonBody.property=loopItercode(codeJsonBody.property);
-    if(codeJsonBody.object.name in args)
-        return args[codeJsonBody.object.name].elements[codeJsonBody.property.raw];
-    else return codeJsonBody;
+    return args[codeJsonBody.object.name].elements[codeJsonBody.property.raw];
 }
 
 function unaryExpression(codeJsonBody){
@@ -301,9 +307,7 @@ function blockStatement(codeJsonBody,rows) {
     }
     for (let i = 0; i < codeJsonBody.body.length; i++) {
         codeJsonBody.body[i]=loopItercode(codeJsonBody.body[i], rows);
-        if(codeJsonBody.body[i]==null) delete codeJsonBody.body[i];
     }
-    codeJsonBody=deleteNullLines(codeJsonBody);
     args = {};
     for(let obj in oldArgs){
         args[obj]=oldArgs[obj];
@@ -311,14 +315,6 @@ function blockStatement(codeJsonBody,rows) {
     return codeJsonBody;
 }
 
-function deleteNullLines(codeJsonBody) {
-    let body = [];
-    for (let i = 0; i < codeJsonBody.body.length; i++){
-        if (codeJsonBody.body[i]!=null) body.push(codeJsonBody.body[i]);
-    }
-    codeJsonBody.body=body;
-    return codeJsonBody;
-}
 function colorLines(jsonTest) {
     let test=revertCode(jsonTest);
     let ifGreen=eval(test);
